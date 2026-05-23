@@ -1,4 +1,7 @@
+import {useEffect} from 'react';
 import {useNavigate, useParams} from 'react-router-dom';
+import {useQuery} from '@tanstack/react-query';
+import {notifications} from '@mantine/notifications';
 import {
     ActionIcon,
     Badge,
@@ -14,10 +17,12 @@ import {
     Text,
     ThemeIcon,
     Title,
-    Typography
+    Typography,
+    ScrollArea
 } from '@mantine/core';
 import {IconArrowLeft, IconCalendar, IconFlame, IconHeart, IconUser, IconWorld} from '@tabler/icons-react';
-import {useGetBookDetails, useGetVolumes} from '../api/generated/books/books';
+import {getBookDetails, getVolumes} from '../api/generated/books/books';
+import {getSharedBookDetails, getSharedVolumes} from '../api/generated/sharing/sharing';
 import {SecureImage} from '../components/SecureImage';
 import {VolumeCard} from '../components/VolumeCard';
 import {type IBaseBookItem, type VolumeItem} from '../api/model';
@@ -31,21 +36,45 @@ import {I18N} from "../components/I18N.tsx";
 import type {ReactNode} from "react";
 
 export const BookDetailsPage = () => {
-    const {id} = useParams<{ id: string }>();
+    const {id, token: shareToken} = useParams<{ id?: string; token?: string }>();
     const {t} = useTranslation();
     const navigate = useNavigate();
+    const isSharing = !!shareToken;
 
-    const {data: bookData, isLoading: isBookLoading} = useGetBookDetails(
-        id as string,
-        {with_volumes: true, with_chapters: false},
-        {query: {enabled: !!id && id !== 'undefined'}}
-    );
+    const bookHash = id || shareToken || '';
 
-    const {data: volumesData, isLoading: isVolumesLoading} = useGetVolumes(
-        id as string,
-        {with_chapters: false},
-        {query: {enabled: !!id && id !== 'undefined'}}
-    );
+    const {data: bookData, isLoading: isBookLoading, isError: isBookError} = useQuery({
+        queryKey: isSharing ? ['sharedBook', shareToken] : ['bookDetails', id],
+        queryFn: async () => {
+            if (isSharing) {
+                const res = await getSharedBookDetails(shareToken!, {with_volumes: false, with_chapters: false});
+                return res as unknown as IBaseBookItem;
+            }
+            const res = await getBookDetails(bookHash, {with_volumes: true, with_chapters: false});
+            return res as unknown as IBaseBookItem;
+        },
+        enabled: !!bookHash && bookHash !== 'undefined',
+    });
+
+    useEffect(() => {
+        if (isSharing && isBookError) {
+            notifications.show({message: t('share_invalid_link'), color: 'red'});
+            navigate('/login', {replace: true});
+        }
+    }, [isSharing, isBookError, navigate, t]);
+
+    const {data: volumesData, isLoading: isVolumesLoading} = useQuery({
+        queryKey: isSharing ? ['sharedVolumes', shareToken] : ['volumes', id],
+        queryFn: async () => {
+            if (isSharing) {
+                const res = await getSharedVolumes(shareToken!, {with_chapters: false});
+                return res as unknown as VolumeItem[];
+            }
+            const res = await getVolumes(bookHash, {with_chapters: false});
+            return res as unknown as VolumeItem[];
+        },
+        enabled: !!bookHash && bookHash !== 'undefined',
+    });
 
     if (isBookLoading) {
         return (
@@ -61,7 +90,7 @@ export const BookDetailsPage = () => {
         );
     }
 
-    if (!bookData || !id || id === 'undefined') {
+    if (!bookData || (!isSharing && (!id || id === 'undefined'))) {
         return (
             <Container my="xl">
                 <Button variant="subtle" leftSection={<IconArrowLeft size={16}/>}
@@ -117,7 +146,7 @@ export const BookDetailsPage = () => {
         <Box>
             <Box bg="var(--mantine-color-body)" pt="md" pb="xl"
                  style={{borderBottom: '1px solid var(--mantine-color-default-border)'}}>
-                <Container fluid>
+                <Container fluid px={{base: 4, sm: 'md'}}>
                     <Grid gutter="xl">
                         <Grid.Col span={{base: 12, xs: 4, sm: 3, md: 3, lg: 2}} style={{position: 'relative'}}>
 
@@ -140,11 +169,14 @@ export const BookDetailsPage = () => {
                             </ActionIcon>
 
                             <Box style={{borderRadius: 8, overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.2)'}}>
-                                <SecureImage hash={book.cover} alt={book.title} height="auto"/>
+                                <SecureImage hash={book.cover} alt={book.title} height="auto" token={shareToken}/>
                             </Box>
 
                             <Button fullWidth mt="md" size="md" onClick={() => {
-                                if (firstUnread) navigate(`/read/${currentBookId}/${firstUnread.id}`);
+                                if (firstUnread) {
+                                    if (isSharing) navigate(`/sharing/${shareToken}/read/${firstUnread.id}`);
+                                    else navigate(`/read/${currentBookId}/${firstUnread.id}`);
+                                }
                             }}>
                                 {isNotReadBefore ? <I18N>read</I18N> : <I18N>continue_reading</I18N>}
                             </Button>
@@ -223,16 +255,14 @@ export const BookDetailsPage = () => {
                                 </Group>
 
                                 <Typography p={0} mt="sm">
-                                    <div
+                                    <ScrollArea h={150} scrollbarSize={6} type="hover"
                                         style={{
-                                            maxHeight: 150,
-                                            overflowY: 'auto',
                                             fontSize: '15px',
                                             lineHeight: '1.6',
                                             color: 'var(--mantine-color-text)'
-                                        }}
-                                        dangerouslySetInnerHTML={{__html: book.description || t('error_no_description')}}
-                                    />
+                                        }}>
+                                        <div dangerouslySetInnerHTML={{__html: book.description || t('error_no_description')}}/>
+                                    </ScrollArea>
                                 </Typography>
 
                                 <Divider my="sm"/>
@@ -264,7 +294,7 @@ export const BookDetailsPage = () => {
                 </Container>
             </Box>
 
-            <Container fluid mt="md">
+            <Container fluid mt="md" px={{base: 4, sm: 'md'}}>
                 <Title order={3} mb="lg"><I18N values={{val: volumes.length}}>volumes_label</I18N></Title>
 
                 {isVolumesLoading ? (
@@ -276,7 +306,9 @@ export const BookDetailsPage = () => {
                         <SimpleGrid cols={{base: 2, xs: 3, sm: 4, md: 5, lg: 6, xl: 8}} spacing="md"
                                     verticalSpacing="xl">
                             {volumes.map((vol) => (
-                                <VolumeCard volume={vol} bookId={currentBookId}/>
+                                <VolumeCard volume={vol} bookId={currentBookId} token={shareToken}
+                                    onRead={isSharing ? (vid) => navigate(`/sharing/${shareToken}/read/${vid}`) : undefined}
+                                    showContinue={isSharing}/>
                             ))}
                         </SimpleGrid>
                     ) : (

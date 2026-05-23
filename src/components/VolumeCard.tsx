@@ -9,15 +9,23 @@ interface VolumeCardProps {
     volume: VolumeItem;
     bookId: string;
     coverId?: string;
+    token?: string;
+    onRead?: (volumeId: string) => void;
+    showContinue?: boolean;
 }
 
-export const VolumeCard = ({volume, bookId}: VolumeCardProps) => {
+export const VolumeCard = ({volume, bookId, token, onRead, showContinue}: VolumeCardProps) => {
     const navigate = useNavigate();
 
     const currentPage = volume.history?.current_page || 0;
     const totalPages = volume.pages_count || 1;
     const progress = (currentPage / totalPages) * 100;
     const isRead = progress >= 95 || volume.read;
+
+    const handleClick = () => {
+        if (onRead) onRead(volume.id || '');
+        else navigate(`/read/${bookId}/${volume.id}`);
+    };
 
     return (
         <Card
@@ -26,17 +34,16 @@ export const VolumeCard = ({volume, bookId}: VolumeCardProps) => {
             radius="md"
             withBorder
             style={{cursor: 'pointer', height: '100%', position: 'relative'}}
-            onClick={() => navigate(`/read/${bookId}/${volume.id}`)}
+            onClick={handleClick}
         >
             <Card.Section>
                 <AspectRatio ratio={2 / 3}>
-                    {!volume.read ? (
-                        <SecureImage hash={volume.id || ''} alt={volume.title || 'Cover'} height="100%"/>
+                    {!volume.read || showContinue ? (
+                        <SecureImage hash={volume.id || ''} alt={volume.title || 'Cover'} height="100%" token={token}/>
                     ) : (
                         <Box bg="gray.8" w="100%" h="100%"/>
                     )}
-
-                    {isRead && (
+                    {isRead && !showContinue && (
                         <Overlay color="#000" backgroundOpacity={0.65} zIndex={5} blur={2} center>
                             <IconCheck size={60} color="white" stroke={3}/>
                         </Overlay>

@@ -12,17 +12,18 @@ interface ReaderImageProps {
     mode: 'PAGED' | 'WEBTOON';
     isActive?: boolean;
     preload?: boolean;
+    token?: string;
 }
 
-const fetchPageImage = async (volumeHash: string, page: number) => {
-    const response = await AXIOS_INSTANCE.get(
-        `/api/v1/books/${volumeHash}/page/${page}`,
-        {responseType: 'blob'}
-    );
+const fetchPageImage = async (volumeHash: string, page: number, token?: string) => {
+    const url = token
+        ? `/api/v1/share/${token}/${volumeHash}/page/${page}`
+        : `/api/v1/books/${volumeHash}/page/${page}`;
+    const response = await AXIOS_INSTANCE.get(url, {responseType: 'blob'});
     return response.data as Blob;
 };
 
-export const ReaderImage = ({volumeHash, page, mode, isActive, preload}: ReaderImageProps) => {
+export const ReaderImage = ({volumeHash, page, mode, isActive, preload, token}: ReaderImageProps) => {
     const {scaleMode, widthPercent} = useReaderSettings();
 
     const {ref, entry} = useIntersection({
@@ -32,12 +33,12 @@ export const ReaderImage = ({volumeHash, page, mode, isActive, preload}: ReaderI
     });
 
     const shouldFetch = mode === 'PAGED'
-        ? (isActive || preload)
-        : (entry?.isIntersecting || false);
+        ? true
+        : (entry?.isIntersecting || isActive || false);
 
     const {data: blob, isLoading, isError} = useQuery({
-        queryKey: ['page', volumeHash, page],
-        queryFn: () => fetchPageImage(volumeHash, page),
+        queryKey: ['page', volumeHash, page, token],
+        queryFn: () => fetchPageImage(volumeHash, page, token),
         enabled: shouldFetch,
         staleTime: Infinity,
         gcTime: 1000 * 60 * 30,

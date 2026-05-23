@@ -1,8 +1,11 @@
 import {
     ActionIcon,
     AppShell,
+    Box,
+    Button,
     Group,
     Image,
+    Modal,
     Stack,
     Text,
     TextInput,
@@ -18,15 +21,50 @@ import {useUIStore} from '../store/uiStore';
 import {useTranslation} from 'react-i18next';
 import {useDebouncedCallback} from '@mantine/hooks';
 import {I18N} from "../components/I18N.tsx";
+import {useEffect, useState} from 'react';
+import {AXIOS_INSTANCE} from '../api/custom-instance';
+import type {AuthUserInfo} from '../store/authStore';
+import {ServerStatusOverlay} from '../components/ServerStatusOverlay';
+import {PwaInstallBanner} from '../components/PwaInstallBanner';
+import {SearchPanel} from '../components/SearchPanel';
 
 export function MainLayout() {
     const {i18n, t} = useTranslation();
     const {setColorScheme} = useMantineColorScheme();
     const computedColorScheme = useComputedColorScheme('dark');
     const logout = useAuthStore((s) => s.logout);
+    const token = useAuthStore((s) => s.token);
+    const user = useAuthStore((s) => s.user);
+    const setUser = useAuthStore((s) => s.setUser);
     const navigate = useNavigate();
     const location = useLocation();
     const setSearchQuery = useUIStore((state) => state.setSearchQuery);
+    const [logoutOpen, setLogoutOpen] = useState(false);
+    const [searchFocused, setSearchFocused] = useState(false);
+    const [searchValue, setSearchValue] = useState('');
+
+    useEffect(() => {
+        if (token && !user) {
+            AXIOS_INSTANCE.get('/api/v1/users/me')
+                .then(r => r.data)
+                .then((userData: any) => {
+                    const roles: string[] = Array.isArray(userData.roles) ? userData.roles
+                        : typeof userData.roles === 'string' ? userData.roles.split(',').map((s: string) => s.trim()) : [];
+                    const authorities: string[] = Array.isArray(userData.authorities) ? userData.authorities
+                        : (userData.authoritiesSet || []);
+                    const isAdmin = roles.some((r: string) => r.toUpperCase() === 'ADMIN');
+                    const userInfo: AuthUserInfo = {
+                        id: userData.id as number,
+                        userName: userData.user_name || '',
+                        isAdmin,
+                        roles,
+                        authorities,
+                    };
+                    setUser(userInfo);
+                })
+                .catch(() => {});
+        }
+    }, [token, user, setUser]);
 
     const toggleLanguage = () => {
         const isRu = i18n.language.toLowerCase().startsWith('ru');
@@ -109,13 +147,27 @@ export function MainLayout() {
                             Atsumeru
                         </Text>
                     </Group>
-                    <TextInput
-                        placeholder={t('search_ellipsize')}
-                        leftSection={<IconSearch size={16}/>}
-                        visibleFrom="xs"
-                        w={{base: 200, sm: 400}}
-                        onChange={(e) => handleSearch(e.currentTarget.value)}
-                    />
+                    <Box pos="relative" visibleFrom="xs" w={{base: 280, sm: 560}}>
+                        <TextInput
+                            id="header-search-input"
+                            placeholder={t('search_ellipsize')}
+                            leftSection={<IconSearch size={16}/>}
+                            value={searchValue}
+                            onChange={(e) => {
+                                const v = e.currentTarget.value;
+                                setSearchValue(v);
+                                handleSearch(v);
+                            }}
+                            onFocus={() => setSearchFocused(true)}
+                        />
+                        {searchFocused && (
+                            <SearchPanel
+                                query={searchValue}
+                                onClose={() => setSearchFocused(false)}
+                                inputId="header-search-input"
+                            />
+                        )}
+                    </Box>
                     <Group>
                         <ActionIcon onClick={toggleColorScheme} variant="subtle" size="lg">
                             {computedColorScheme === 'dark' ? <IconSun size={18}/> : <IconMoon size={18}/>}
@@ -130,7 +182,7 @@ export function MainLayout() {
                             </ActionIcon>
                         </Tooltip>
                         <Tooltip label={t('logout')}>
-                            <ActionIcon onClick={logout} variant="subtle" color="red" size="lg">
+                            <ActionIcon onClick={() => setLogoutOpen(true)} variant="subtle" color="red" size="lg">
                                 <IconLogout size={18}/>
                             </ActionIcon>
                         </Tooltip>
@@ -147,6 +199,28 @@ export function MainLayout() {
             <AppShell.Main>
                 <Outlet/>
             </AppShell.Main>
+
+            <ServerStatusOverlay/>
+
+            <PwaInstallBanner/>
+
+            <Modal
+                opened={logoutOpen}
+                onClose={() => setLogoutOpen(false)}
+                title={t('logout')}
+            >
+                <Stack>
+                    <Text><I18N>logout_confirm</I18N></Text>
+                    <Group justify="flex-end">
+                        <Button variant="default" onClick={() => setLogoutOpen(false)}>
+                            <I18N>cancel</I18N>
+                        </Button>
+                        <Button color="red" onClick={() => { setLogoutOpen(false); logout(); }}>
+                            {t('logout')}
+                        </Button>
+                    </Group>
+                </Stack>
+            </Modal>
 
             <AppShell.Footer zIndex={100} hiddenFrom="sm"
                              style={{borderTop: '1px solid var(--mantine-color-default-border)'}}>

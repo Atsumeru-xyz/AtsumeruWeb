@@ -3,6 +3,7 @@ import {LoginPage} from './pages/LoginPage';
 import {HomePage} from './pages/HomePage';
 import {LibraryPage} from './pages/LibraryPage';
 import {MainLayout} from './layouts/MainLayout';
+import {SharingLayout} from './layouts/SharingLayout';
 import {BookDetailsPage} from './pages/BookDetailsPage';
 import {SettingsPage} from './pages/SettingsPage';
 import {ReaderPage} from './pages/ReaderPage';
@@ -39,6 +40,11 @@ function App() {
                         </ProtectedRoute>
                     }
                 />
+
+                <Route path="/sharing/:token" element={<SharingLayout/>}>
+                    <Route index element={<BookDetailsPage/>}/>
+                    <Route path="read/:volumeId" element={<ReaderPage/>}/>
+                </Route>
             </Routes>
         </BrowserRouter>
     );

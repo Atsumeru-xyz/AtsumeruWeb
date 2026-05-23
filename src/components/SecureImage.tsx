@@ -9,21 +9,25 @@ interface SecureImageProps {
     alt: string;
     height?: number | string;
     fit?: 'cover' | 'contain';
+    token?: string;
 }
 
-const fetchImageBlob = async (hash: string) => {
+const fetchImageBlob = async (hash: string, token?: string) => {
     const cleanHash = hash.replace(/\?t=\d+/, "");
+    const url = token
+        ? `/api/v1/share/${token}/cover/${cleanHash}?type=thumbnail`
+        : `/api/v1/cover/${cleanHash}?type=thumbnail`;
 
-    const response = await AXIOS_INSTANCE.get(`/api/v1/cover/${cleanHash}?type=thumbnail`, {
+    const response = await AXIOS_INSTANCE.get(url, {
         responseType: 'blob'
     });
     return response.data as Blob;
 };
 
-export const SecureImage = ({hash, alt, height = 300, fit = 'cover'}: SecureImageProps) => {
+export const SecureImage = ({hash, alt, height = 300, fit = 'cover', token}: SecureImageProps) => {
     const {data: blob, isLoading, isError} = useQuery({
-        queryKey: ['image', hash],
-        queryFn: () => fetchImageBlob(hash),
+        queryKey: ['image', hash, token],
+        queryFn: () => fetchImageBlob(hash, token),
 
         staleTime: Infinity,
         gcTime: 1000 * 60 * 10,

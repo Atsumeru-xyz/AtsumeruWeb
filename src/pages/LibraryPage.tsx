@@ -12,7 +12,8 @@ import {
     Menu,
     ScrollArea,
     SimpleGrid,
-    Tabs
+    Tabs,
+    Tooltip
 } from '@mantine/core';
 import {useInfiniteQuery} from '@tanstack/react-query';
 import {useIntersection} from '@mantine/hooks';
@@ -31,11 +32,19 @@ import {useGetCategoryList} from '../api/generated/categories/categories';
 import type {IBaseBookItem} from '../api/model';
 
 import {BookCard} from '../components/BookCard';
+import {ChangeCategoryDialog} from '../components/ChangeCategoryDialog';
+import {MetadataEditorDialog} from '../components/MetadataEditorDialog';
+import {ShareTokenDialog} from '../components/ShareTokenDialog';
 import {useUIStore} from '../store/uiStore';
+import {useSelectionStore} from '../store/selectionStore';
 import {GetBooksSort, type GetBooksSortType} from '../constants/sort';
 import {I18N} from "../components/I18N.tsx";
 import {useTranslation} from "react-i18next";
 import {useHorizontalScroll} from "../useHorizontalScroll.ts";
+import {useState} from 'react';
+import {useQueryClient} from '@tanstack/react-query';
+import {useAuthStore} from '../store/authStore';
+import {IconSelectAll, IconDeselect, IconTag} from '@tabler/icons-react';
 
 interface Category {
     id: string;
@@ -46,6 +55,7 @@ interface Category {
 
 export const LibraryPage = () => {
     const {t} = useTranslation();
+    const queryClient = useQueryClient();
 
     const {
         searchQuery, activeCategory, sort, asc,
@@ -54,6 +64,23 @@ export const LibraryPage = () => {
     const {data: categoriesData, isLoading: isCatsLoading, error: catsError} = useGetCategoryList();
 
     const scrollRef = useHorizontalScroll();
+
+    const inSelection = useSelectionStore((s) => s.selected.size > 0);
+    const selectedIds = useSelectionStore((s) => s.selected);
+    const selectAll = useSelectionStore((s) => s.selectAll);
+    const clearSelection = useSelectionStore((s) => s.clear);
+
+    const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+    const [categoryDialogIds, setCategoryDialogIds] = useState<string[]>([]);
+    const [categoryDialogBookCats, setCategoryDialogBookCats] = useState<string[][]>([]);
+
+    const [editorOpened, setEditorOpened] = useState(false);
+    const [editorBook, setEditorBook] = useState<IBaseBookItem | null>(null);
+
+    const [shareOpened, setShareOpened] = useState(false);
+    const [shareBook, setShareBook] = useState<IBaseBookItem | null>(null);
+
+    const isAdmin = useAuthStore((s) => s.isAdmin());
 
     const categories = useMemo(() => {
         if (!categoriesData) return [];
@@ -212,10 +239,40 @@ export const LibraryPage = () => {
                 </Flex>
             </Box>
 
-            <Container fluid mt="md">
+            <Container fluid mt="md" px={{base: 4, sm: 'md'}}>
                 {isBooksError && (
                     <Alert color="red" title={t('error')}
                            icon={<IconInfoCircle/>}><I18N>error_unable_to_load_list</I18N></Alert>
+                )}
+
+                {inSelection && isAdmin && (
+                    <Group mb="md" gap="xs" p="sm" style={{
+                        background: 'var(--mantine-primary-color-light)',
+                        borderRadius: 'var(--mantine-radius-md)',
+                    }}>
+                        <Button size="xs" variant="filled" leftSection={<IconTag size={14}/>} onClick={() => {
+                            const ids = [...selectedIds];
+                            const bookCats = ids.map(id => {
+                                const book = allBooks.find(b => b.id === id);
+                                const raw = (book as any)?.categories;
+                                return Array.isArray(raw) ? raw : (typeof raw === 'string' ? raw.split(',').filter(Boolean) : []);
+                            });
+                            setCategoryDialogIds(ids);
+                            setCategoryDialogBookCats(bookCats);
+                            setCategoryDialogOpen(true);
+                        }}>
+                            <I18N>context_change_category</I18N>
+                        </Button>
+                        <Button size="xs" variant="light" leftSection={<IconSelectAll size={14}/>} onClick={() => {
+                            const allIds = allBooks.map(b => b.id || '').filter(Boolean);
+                            selectAll(allIds);
+                        }}>
+                            <I18N>context_select_all</I18N>
+                        </Button>
+                        <Button size="xs" variant="light" leftSection={<IconDeselect size={14}/>} onClick={clearSelection}>
+                            <I18N>context_clear_selection</I18N>
+                        </Button>
+                    </Group>
                 )}
 
                 {!isBooksLoading && allBooks.length === 0 && (
@@ -232,7 +289,28 @@ export const LibraryPage = () => {
                     verticalSpacing="lg"
                 >
                     {allBooks.map((book) => (
-                        <BookCard key={`${book.id}`} book={book}/>
+                        <BookCard
+                            key={`${book.id}`}
+                            book={book}
+                            onEdit={(book) => {
+                                setEditorBook(book);
+                                setEditorOpened(true);
+                            }}
+                            onChangeCategory={(b) => {
+                                const raw = (b as any).categories;
+                                const catIds = Array.isArray(raw) ? raw : (typeof raw === 'string' ? raw.split(',').filter(Boolean) : []);
+                                setCategoryDialogIds([b.id || '']);
+                                setCategoryDialogBookCats([catIds]);
+                                setCategoryDialogOpen(true);
+                            }}
+                            onDeleted={() => {
+                                queryClient.invalidateQueries();
+                            }}
+                            onShare={(book) => {
+                                setShareBook(book);
+                                setShareOpened(true);
+                            }}
+                        />
                     ))}
                 </SimpleGrid>
 
@@ -244,6 +322,33 @@ export const LibraryPage = () => {
 
                 <div ref={ref} style={{height: 20}}/>
             </Container>
+
+            <ChangeCategoryDialog
+                opened={categoryDialogOpen}
+                onClose={() => setCategoryDialogOpen(false)}
+                bookIds={categoryDialogIds}
+                bookCategoryIds={categoryDialogBookCats}
+                onChanged={() => {
+                    queryClient.invalidateQueries();
+                    clearSelection();
+                }}
+            />
+
+            <MetadataEditorDialog
+                opened={editorOpened}
+                onClose={() => setEditorOpened(false)}
+                book={editorBook}
+                onSaved={() => {
+                    queryClient.invalidateQueries();
+                }}
+            />
+
+            <ShareTokenDialog
+                opened={shareOpened}
+                onClose={() => setShareOpened(false)}
+                serieHash={shareBook?.id || ''}
+                serieName={shareBook?.title || ''}
+            />
         </Container>
     );
 };

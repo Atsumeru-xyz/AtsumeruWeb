@@ -25,8 +25,8 @@ a:hover {
 
 body {
     margin: 0;
-    display: flex;
-    place-items: center;
+    /*display: flex;*/
+    /*place-items: center;*/
     min-width: 320px;
     min-height: 100vh;
 }
@@ -69,5 +69,26 @@ button:focus-visible {
 
     button {
         background-color: #f9f9f9;
+    }
+}
+
+.ctx-menu-item:hover {
+    background-color: var(--mantine-color-default-hover);
+}
+
+@media (max-width: 48em) {
+    .mantine-AppShell-main {
+        padding-left: 4px !important;
+        padding-right: 4px !important;
+    }
+
+    .mantine-AppShell-main .mantine-Container-root {
+        padding-left: 4px !important;
+        padding-right: 4px !important;
+    }
+
+    .mantine-AppShell-main .mantine-Tabs-root {
+        padding-left: 4px !important;
+        padding-right: 4px !important;
     }
 }

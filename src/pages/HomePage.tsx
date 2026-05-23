@@ -40,7 +40,7 @@ export const HomePage = () => {
     const arrivals = (arrivalsData as unknown) as IBaseBookItem[] | undefined;
 
     return (
-        <Container fluid>
+        <Container fluid px={{base: 4, sm: 'md'}}>
             <HorizontalList
                 title={<I18N>continue_reading</I18N>}
                 data={readingHistory}

@@ -33,13 +33,16 @@ AXIOS_INSTANCE.interceptors.response.use(
 
 export const customInstance = <T>(
     url: string,
-    config?: AxiosRequestConfig,
+    config?: AxiosRequestConfig & { body?: unknown },
 ): Promise<T> => {
     const source = axios.CancelToken.source();
 
+    const { body, ...restConfig } = config || {};
+
     const promise = AXIOS_INSTANCE({
         url,
-        ...config,
+        ...restConfig,
+        ...(body !== undefined ? { data: body } : {}),
         cancelToken: source.token,
     }).then(({data}) => data);
 

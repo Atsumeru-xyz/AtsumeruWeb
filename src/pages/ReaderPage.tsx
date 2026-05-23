@@ -17,7 +17,8 @@ import {useDebouncedCallback, useFullscreen} from '@mantine/hooks';
 import {notifications} from '@mantine/notifications';
 import {useTranslation} from 'react-i18next';
 
-import {useGetVolumes} from '../api/generated/books/books';
+import {getVolumes} from '../api/generated/books/books';
+import {getSharedVolumes} from '../api/generated/sharing/sharing';
 import type {VolumeItem} from '../api/model';
 
 import {AXIOS_INSTANCE} from '../api/custom-instance';
@@ -41,9 +42,10 @@ interface VolumeInfo {
 
 export const ReaderPage = () => {
     const {t} = useTranslation();
-    const {bookId, volumeId} = useParams<{ bookId: string; volumeId: string }>();
+    const {bookId, volumeId, token} = useParams<{ bookId?: string; volumeId: string; token?: string }>();
     const navigate = useNavigate();
     const location = useLocation();
+    const isSharing = !!token;
     const {toggle: toggleFullscreen, fullscreen} = useFullscreen();
     const {
         mode, setMode,
@@ -56,6 +58,8 @@ export const ReaderPage = () => {
     const [uiVisible, setUiVisible] = useState(true);
 
     const isRestored = useRef(false);
+    const touchStartX = useRef(0);
+    const touchStartY = useRef(0);
 
     const [sliderValue, setSliderValue] = useState(1);
 
@@ -67,16 +71,38 @@ export const ReaderPage = () => {
         isRestored.current = false;
     }, [volumeId]);
 
-    const {data: volume, isLoading} = useQuery({
-        queryKey: ['volume', volumeId],
+    const {data: volume, isLoading, isError: isVolumeError} = useQuery({
+        queryKey: isSharing ? ['sharedVolume', token, volumeId] : ['volume', volumeId],
         queryFn: async () => {
+            if (isSharing) {
+                const res = await AXIOS_INSTANCE.get<VolumeInfo>(`/api/v1/share/${token}/volumes/${volumeId}`);
+                return res.data;
+            }
             const res = await AXIOS_INSTANCE.get<VolumeInfo>(`/api/v1/books/${bookId}/volumes/${volumeId}`);
             return res.data;
         },
-        enabled: !!bookId && !!volumeId
+        enabled: !!volumeId && (!!bookId || !!token),
     });
 
-    const {data: volumesData} = useGetVolumes(bookId as string, {with_chapters: false}, {query: {enabled: !!bookId}});
+    const {data: volumesData} = useQuery({
+        queryKey: isSharing ? ['sharedVolumesList', token] : ['volumes', bookId],
+        queryFn: async () => {
+            if (isSharing) {
+                const res = await getSharedVolumes(token!, {with_chapters: false});
+                return res as unknown as VolumeItem[];
+            }
+            const res = await getVolumes(bookId!, {with_chapters: false});
+            return res as unknown as VolumeItem[];
+        },
+        enabled: !!bookId || !!token,
+    });
+
+    useEffect(() => {
+        if (isSharing && isVolumeError) {
+            notifications.show({message: t('share_invalid_link'), color: 'red'});
+            navigate('/login', {replace: true});
+        }
+    }, [isSharing, isVolumeError, navigate, t]);
 
     const totalPages = volume?.pages_count || 1;
 
@@ -145,7 +171,7 @@ export const ReaderPage = () => {
     }, [volume, totalPages, location.state, mode]);
 
     const syncProgress = useDebouncedCallback(async (currentPage: number) => {
-        if (!bookId || !volumeId) return;
+        if (!bookId || !volumeId || isSharing) return;
 
         console.log(`Syncing progress: Volume ${volumeId}, Page ${currentPage}`);
 
@@ -172,7 +198,7 @@ export const ReaderPage = () => {
 
     const goNextVolume = useCallback(() => {
         if (nextVolume) {
-            navigate(`/read/${bookId}/${nextVolume.id}`, {replace: true, state: {page: 1}});
+            navigate(isSharing ? `/sharing/${token}/read/${nextVolume.id}` : `/read/${bookId}/${nextVolume.id}`, {replace: true, state: {page: 1}});
         } else {
             notifications.show({title: t('notification_end'), message: t('notification_finished_reading_last_volume'), color: 'blue'});
         }
@@ -180,7 +206,7 @@ export const ReaderPage = () => {
 
     const goPrevVolume = useCallback(() => {
         if (prevVolume) {
-            navigate(`/read/${bookId}/${prevVolume.id}`, {replace: true, state: {page: 'last'}});
+            navigate(isSharing ? `/sharing/${token}/read/${prevVolume.id}` : `/read/${bookId}/${prevVolume.id}`, {replace: true, state: {page: 'last'}});
         } else {
             notifications.show({title: t('notification_start'), message: t('notification_first_volume'), color: 'blue'});
         }
@@ -228,6 +254,25 @@ export const ReaderPage = () => {
         }
     };
 
+    const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+        touchStartX.current = e.touches[0].clientX;
+        touchStartY.current = e.touches[0].clientY;
+    };
+
+    const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+        const dx = e.changedTouches[0].clientX - touchStartX.current;
+        const dy = e.changedTouches[0].clientY - touchStartY.current;
+
+        if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy)) return;
+
+        const isRTL = readingDirection === 'RTL';
+        if (dx > 0) {
+            isRTL ? nextPage() : prevPage();
+        } else {
+            isRTL ? prevPage() : nextPage();
+        }
+    };
+
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (mode === 'PAGED') {
@@ -251,19 +296,25 @@ export const ReaderPage = () => {
                     w="100%"
                     h="100%"
                     onClick={handleZoneClick}
+                    onTouchStart={handleTouchStart}
+                    onTouchEnd={handleTouchEnd}
                     style={{
                         cursor: 'pointer',
                         display: 'flex',
                         overflowY: scaleMode === 'FIT_WIDTH' ? 'auto' : 'hidden',
                         alignItems: scaleMode === 'FIT_WIDTH' ? 'flex-start' : 'center',
-                        justifyContent: 'center'
+                        justifyContent: 'center',
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        WebkitTapHighlightColor: 'transparent',
+                        touchAction: 'pan-y'
                     }}
                 >
-                    {bookId && volumeId && (
+                    {volumeId && (bookId || token) && (
                         <>
-                            <ReaderImage volumeHash={volumeId} page={page} mode="PAGED" isActive={true}/>
+                            <ReaderImage volumeHash={volumeId} page={page} mode="PAGED" isActive={true} token={token}/>
                             <div style={{display: 'none'}}>
-                                <ReaderImage volumeHash={volumeId} page={page + 1} mode="PAGED" preload={true}/>
+                                <ReaderImage volumeHash={volumeId} page={page + 1} mode="PAGED" preload={true} token={token}/>
                             </div>
                         </>
                     )}
@@ -296,13 +347,14 @@ export const ReaderPage = () => {
                         </Box>
                     )}
 
-                    {bookId && volumeId && Array.from({length: totalPages}).map((_, index) => (
+                    {volumeId && (bookId || token) && Array.from({length: totalPages}).map((_, index) => (
                         <div key={index + 1} ref={(el) => pageRefs.current[index] = el}>
                             <ReaderImage
                                 key={index + 1}
                                 volumeHash={volumeId}
                                 page={index + 1}
                                 mode="WEBTOON"
+                                token={token}
                             />
                         </div>
                     ))}
@@ -318,7 +370,7 @@ export const ReaderPage = () => {
                         ) : (
                             <Button variant="default" onClick={(e) => {
                                 e.stopPropagation();
-                                navigate(`/book/${bookId}`);
+                                navigate(isSharing ? `/sharing/${token}` : `/book/${bookId}`);
                             }}>
                                 <I18N>book_end</I18N>
                             </Button>

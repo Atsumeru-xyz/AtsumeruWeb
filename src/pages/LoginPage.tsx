@@ -2,10 +2,10 @@ import {useState} from 'react';
 import {Alert, Avatar, Box, Button, Center, Paper, PasswordInput, Text, TextInput, Title} from '@mantine/core';
 import {useNavigate} from 'react-router-dom';
 import {IconLock} from '@tabler/icons-react';
-import {useAuthStore} from '../store/authStore';
+import {useAuthStore, type AuthUserInfo} from '../store/authStore';
 import {useTranslation} from 'react-i18next';
 import {AXIOS_INSTANCE} from '../api/custom-instance';
-import { I18N } from '../components/I18N';
+import {I18N} from '../components/I18N';
 
 export const LoginPage = () => {
     const {t} = useTranslation();
@@ -14,6 +14,7 @@ export const LoginPage = () => {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const setAuth = useAuthStore((state) => state.setAuth);
+    const setUser = useAuthStore((state) => state.setUser);
     const navigate = useNavigate();
 
     const handleLogin = async () => {
@@ -27,11 +28,27 @@ export const LoginPage = () => {
 
         try {
             const token = btoa(`${username}:${password}`);
-            await AXIOS_INSTANCE.get('/api/server/ping', {
+
+            const userData = await AXIOS_INSTANCE.get('/api/v1/users/me', {
                 headers: {Authorization: `Basic ${token}`}
-            });
+            }).then(r => r.data);
+
+            const roles: string[] = Array.isArray(userData.roles) ? userData.roles 
+                : typeof userData.roles === 'string' ? userData.roles.split(',').map((s: string) => s.trim()) : [];
+            const authorities: string[] = Array.isArray(userData.authorities) ? userData.authorities
+                : (userData.authoritiesSet || []);
+            const isAdmin = roles.some((r: string) => r.toUpperCase() === 'ADMIN');
+
+            const userInfo: AuthUserInfo = {
+                id: userData.id as number,
+                userName: username,
+                isAdmin,
+                roles,
+                authorities,
+            };
 
             setAuth(username, token);
+            setUser(userInfo);
             navigate('/');
         } catch (e: any) {
             setError(e.message || t('login_error'));
