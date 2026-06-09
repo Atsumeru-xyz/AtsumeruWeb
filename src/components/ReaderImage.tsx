@@ -96,7 +96,16 @@ export const ReaderImage = ({volumeHash, page, mode, isActive, preload, token}: 
                 <img
                     src={objectUrl}
                     alt={`Page ${page}`}
-                    style={getStyle()}
+                    style={{
+                        ...getStyle(),
+                        WebkitUserDrag: 'none',
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        WebkitTouchCallout: 'none',
+                    }}
+                    draggable={false}
+                    onDragStart={(e) => e.preventDefault()}
+                    onContextMenu={(e) => e.preventDefault()}
                 />
             )}
         </div>

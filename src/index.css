@@ -77,6 +77,11 @@ button:focus-visible {
 }
 
 @media (max-width: 48em) {
+    .mantine-AppShell-main.reader-fullscreen {
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+
     .mantine-AppShell-main {
         padding-left: 4px !important;
         padding-right: 4px !important;

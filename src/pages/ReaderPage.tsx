@@ -329,6 +329,8 @@ export const ReaderPage = () => {
                         overflowY: 'auto',
                         overflowX: 'hidden',
                         scrollbarWidth: 'none',
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
                         '&::-webkit-scrollbar': {
                             display: 'none'
                         },

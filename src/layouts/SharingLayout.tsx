@@ -48,7 +48,7 @@ export const SharingLayout = () => {
                 </Group>
             </AppShell.Header>
 
-            <AppShell.Main>
+            <AppShell.Main className={isReader ? 'reader-fullscreen' : undefined}>
                 <Outlet/>
             </AppShell.Main>
         </AppShell>

@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {AspectRatio, Badge, Box, Button, Card, Checkbox, Group, Modal, Overlay, Paper, Progress, Stack, Text} from '@mantine/core';
 import {
     IconCheck, IconFlame, IconHeart,
@@ -39,9 +39,30 @@ export const BookCard = ({book, onEdit, onChangeCategory, onShare, onDeleted}: B
     const [menuOpened, setMenuOpened] = useState(false);
     const menuOpenedRef = useRef(false);
     const [menuPos, setMenuPos] = useState({x: 0, y: 0});
+    const [adjustedPos, setAdjustedPos] = useState({x: 0, y: 0});
+    const menuPaperRef = useRef<HTMLDivElement>(null);
     const [deleteOpen, setDeleteOpen] = useState(false);
 
     useEffect(() => { menuOpenedRef.current = menuOpened; }, [menuOpened]);
+
+    useLayoutEffect(() => {
+        if (menuOpened && menuPaperRef.current) {
+            const rect = menuPaperRef.current.getBoundingClientRect();
+            const padding = 8;
+            let x = menuPos.x;
+            let y = menuPos.y;
+
+            if (x + rect.width > window.innerWidth - padding) {
+                x = Math.max(padding, window.innerWidth - rect.width - padding);
+            }
+            if (y + rect.height > window.innerHeight - padding) {
+                y = Math.max(padding, window.innerHeight - rect.height - padding);
+            }
+
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setAdjustedPos({x, y});
+        }
+    }, [menuOpened, menuPos]);
 
     const config = BOOK_STATUS_CONFIG[book.status as BookStatus] || BOOK_STATUS_CONFIG.UNKNOWN;
     const Icon = config.icon;
@@ -178,7 +199,7 @@ export const BookCard = ({book, onEdit, onChangeCategory, onShare, onDeleted}: B
                 )}
 
                 {menuOpened && (
-                    <Paper shadow="md" withBorder style={{position: 'fixed', left: menuPos.x, top: menuPos.y, zIndex: 300, minWidth: 200}}>
+                    <Paper ref={menuPaperRef} shadow="md" withBorder style={{position: 'fixed', left: adjustedPos.x, top: adjustedPos.y, zIndex: 300, minWidth: 200}}>
                         <Stack gap={0}>
                             <MenuItem icon={<IconTag size={14}/>} onClick={() => handleMenuAction(() => onChangeCategory?.(book))}>
                                 <I18N>context_change_category</I18N>
