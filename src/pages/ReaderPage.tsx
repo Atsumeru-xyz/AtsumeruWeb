@@ -2,11 +2,16 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {useLocation, useNavigate, useParams} from 'react-router-dom';
 import {ActionIcon, Box, Button, Group, Menu, Paper, Slider, Stack, Text, Transition} from '@mantine/core';
 import {
+    IconAlignCenter,
+    IconArrowDown,
     IconArrowLeft,
     IconArrowLeftBar,
     IconArrowRightBar,
     IconArrowsMaximize,
     IconArrowsMinimize,
+    IconArrowUp,
+    IconBell,
+    IconBellOff,
     IconLayoutList,
     IconLayoutRows,
     IconSettings,
@@ -51,7 +56,9 @@ export const ReaderPage = () => {
         mode, setMode,
         scaleMode, setScaleMode,
         readingDirection, setReadingDirection,
-        widthPercent, setWidthPercent
+        widthPercent, setWidthPercent,
+        showNotification, setShowNotification,
+        notificationPosition, setNotificationPosition,
     } = useReaderSettings();
 
     const [page, setPage] = useState(1);
@@ -60,6 +67,7 @@ export const ReaderPage = () => {
     const isRestored = useRef(false);
     const touchStartX = useRef(0);
     const touchStartY = useRef(0);
+    const [inlineNotif, setInlineNotif] = useState<string | null>(null);
 
     const [sliderValue, setSliderValue] = useState(1);
 
@@ -223,12 +231,8 @@ export const ReaderPage = () => {
     }, [page, goPrevVolume]);
 
     const showDirectionNotification = (dir: 'LTR' | 'RTL') => {
-        notifications.show({
-            title: t('reading_mode'),
-            message: dir === 'RTL' ? t('reading_mode_rtl') : t('reading_mode_ltr'),
-            color: 'var(--mantine-primary-color-filled)',
-            autoClose: 3000,
-        });
+        if (!showNotification) return;
+        setInlineNotif(dir === 'RTL' ? t('reading_mode_rtl') : t('reading_mode_ltr'));
     };
 
     const notificationShown = useRef(false);
@@ -239,6 +243,13 @@ export const ReaderPage = () => {
             notificationShown.current = true;
         }
     }, [mode, readingDirection]);
+
+    useEffect(() => {
+        if (inlineNotif) {
+            const timer = setTimeout(() => setInlineNotif(null), 2500);
+            return () => clearTimeout(timer);
+        }
+    }, [inlineNotif]);
 
     const handleZoneClick = (e: React.MouseEvent<HTMLDivElement>) => {
         const width = e.currentTarget.clientWidth;
@@ -476,6 +487,39 @@ export const ReaderPage = () => {
                                             />
                                         </Box>
                                         <Menu.Divider/>
+                                        <Menu.Label><I18N>reader_reading_notification</I18N></Menu.Label>
+                                        <Menu.Item
+                                            leftSection={showNotification ? <IconBell size={14}/> : <IconBellOff size={14}/>}
+                                            onClick={() => setShowNotification(!showNotification)}
+                                        >
+                                            <I18N>reader_reading_notification_show</I18N>
+                                        </Menu.Item>
+                                        {showNotification && (
+                                            <>
+                                                <Menu.Item
+                                                    leftSection={<IconArrowUp size={14}/>}
+                                                    onClick={() => setNotificationPosition('top')}
+                                                    bg={notificationPosition === 'top' ? 'var(--mantine-primary-color-light)' : undefined}
+                                                >
+                                                    <I18N>reader_reading_notification_position_top</I18N>
+                                                </Menu.Item>
+                                                <Menu.Item
+                                                    leftSection={<IconAlignCenter size={14}/>}
+                                                    onClick={() => setNotificationPosition('center')}
+                                                    bg={notificationPosition === 'center' ? 'var(--mantine-primary-color-light)' : undefined}
+                                                >
+                                                    <I18N>reader_reading_notification_position_center</I18N>
+                                                </Menu.Item>
+                                                <Menu.Item
+                                                    leftSection={<IconArrowDown size={14}/>}
+                                                    onClick={() => setNotificationPosition('bottom')}
+                                                    bg={notificationPosition === 'bottom' ? 'var(--mantine-primary-color-light)' : undefined}
+                                                >
+                                                    <I18N>reader_reading_notification_position_bottom</I18N>
+                                                </Menu.Item>
+                                            </>
+                                        )}
+                                        <Menu.Divider/>
                                         <Menu.Item
                                             leftSection={fullscreen ? <IconX size={14}/> : <IconLayoutList size={14}/>}
                                             onClick={toggleFullscreen}
@@ -569,6 +613,28 @@ export const ReaderPage = () => {
                     </Paper>
                 )}
             </Transition>
+
+            {inlineNotif && (
+                <Box
+                    style={{
+                        position: 'absolute',
+                        left: '50%',
+                        transform: notificationPosition === 'center' ? 'translate(-50%, -50%)' : 'translateX(-50%)',
+                        top: notificationPosition === 'top' ? 80 : notificationPosition === 'center' ? '50%' : undefined,
+                        bottom: notificationPosition === 'bottom' ? 80 : undefined,
+                        zIndex: 200,
+                        padding: '10px 20px',
+                        borderRadius: 8,
+                        background: 'rgba(0,0,0,0.85)',
+                        color: 'white',
+                        pointerEvents: 'none',
+                        whiteSpace: 'nowrap',
+                        transition: 'opacity 0.3s ease',
+                    }}
+                >
+                    <Text size="sm" fw={500}>{inlineNotif}</Text>
+                </Box>
+            )}
         </Box>
     );
 };

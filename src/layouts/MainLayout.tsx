@@ -14,14 +14,14 @@ import {
     useComputedColorScheme,
     useMantineColorScheme
 } from '@mantine/core';
-import {IconBooks, IconHome, IconLogout, IconMoon, IconSearch, IconSettings, IconSun, IconHelpHexagon} from '@tabler/icons-react';
+import {IconBooks, IconHome, IconLogout, IconMoon, IconSearch, IconSettings, IconSun, IconHelpHexagon, IconX} from '@tabler/icons-react';
 import {Outlet, useLocation, useNavigate} from 'react-router-dom';
 import {useAuthStore} from '../store/authStore';
 import {useUIStore} from '../store/uiStore';
 import {useTranslation} from 'react-i18next';
 import {useDebouncedCallback} from '@mantine/hooks';
 import {I18N} from "../components/I18N.tsx";
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {AXIOS_INSTANCE} from '../api/custom-instance';
 import type {AuthUserInfo} from '../store/authStore';
 import {ServerStatusOverlay} from '../components/ServerStatusOverlay';
@@ -42,6 +42,18 @@ export function MainLayout() {
     const [logoutOpen, setLogoutOpen] = useState(false);
     const [searchFocused, setSearchFocused] = useState(false);
     const [searchValue, setSearchValue] = useState('');
+    const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+    const [mobileSearchValue, setMobileSearchValue] = useState('');
+    const prevPathname = useRef(location.pathname);
+
+    useEffect(() => {
+        if (prevPathname.current !== location.pathname) {
+            prevPathname.current = location.pathname;
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setMobileSearchOpen(false);
+            setMobileSearchValue('');
+        }
+    }, [location.pathname]);
 
     useEffect(() => {
         if (token && !user) {
@@ -140,14 +152,14 @@ export function MainLayout() {
             padding="md"
         >
             <AppShell.Header>
-                <Group h="100%" px="md" justify="space-between">
-                    <Group style={{cursor: 'pointer'}} onClick={() => navigate('/')}>
+                <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+                    <Group style={{cursor: 'pointer', flexShrink: 0}} onClick={() => navigate('/')}>
                         <Image src="/logo.png" w={32} h={32} fit="contain"/>
                         <Text fw={700} size="xl" visibleFrom="xs">
                             Atsumeru
                         </Text>
                     </Group>
-                    <Box pos="relative" visibleFrom="xs" w={{base: 280, sm: 560}}>
+                    <Box pos="relative" visibleFrom="sm" style={{flex: '1 1 auto', maxWidth: 560, minWidth: 0}}>
                         <TextInput
                             id="header-search-input"
                             placeholder={t('search_ellipsize')}
@@ -168,7 +180,10 @@ export function MainLayout() {
                             />
                         )}
                     </Box>
-                    <Group>
+                    <Group style={{flexShrink: 0}}>
+                        <ActionIcon hiddenFrom="sm" onClick={() => setMobileSearchOpen(true)} variant="subtle" size="lg">
+                            <IconSearch size={18}/>
+                        </ActionIcon>
                         <ActionIcon onClick={toggleColorScheme} variant="subtle" size="lg">
                             {computedColorScheme === 'dark' ? <IconSun size={18}/> : <IconMoon size={18}/>}
                         </ActionIcon>
@@ -221,6 +236,43 @@ export function MainLayout() {
                     </Group>
                 </Stack>
             </Modal>
+
+            {mobileSearchOpen && (
+                <>
+                    <Box style={{position: 'fixed', inset: 0, zIndex: 299}} onClick={() => { setMobileSearchOpen(false); setMobileSearchValue(''); }}/>
+                    <Box style={{
+                        position: 'fixed', top: 60, left: 0, right: 0, zIndex: 300,
+                        maxHeight: 'calc(100vh - 60px)', overflowY: 'auto',
+                    }} bg="var(--mantine-color-body)" p="md" pb={0}>
+                        <Box pos="relative">
+                            <TextInput
+                                id="mobile-search-input"
+                                placeholder={t('search_ellipsize')}
+                                leftSection={<IconSearch size={16}/>}
+                                value={mobileSearchValue}
+                                onChange={(e) => {
+                                    const v = e.currentTarget.value;
+                                    setMobileSearchValue(v);
+                                    handleSearch(v);
+                                }}
+                                autoFocus
+                                rightSection={
+                                    <ActionIcon variant="subtle" onClick={() => { setMobileSearchOpen(false); setMobileSearchValue(''); }}>
+                                        <IconX size={16}/>
+                                    </ActionIcon>
+                                }
+                            />
+                            {mobileSearchValue && (
+                                <SearchPanel
+                                    query={mobileSearchValue}
+                                    onClose={() => { setMobileSearchOpen(false); setMobileSearchValue(''); }}
+                                    inputId="mobile-search-input"
+                                />
+                            )}
+                        </Box>
+                    </Box>
+                </>
+            )}
 
             <AppShell.Footer zIndex={100} hiddenFrom="sm"
                              style={{borderTop: '1px solid var(--mantine-color-default-border)'}}>

@@ -65,6 +65,12 @@ const resources = {
             reader_reading_scaling_fit_width: "По ширине",
             reader_reading_scaling_width_percent: "Ширина изображения: {{val}}%",
 
+            reader_reading_notification: "Уведомления",
+            reader_reading_notification_show: "Показывать уведомления",
+            reader_reading_notification_position_top: "Сверху",
+            reader_reading_notification_position_center: "По центру",
+            reader_reading_notification_position_bottom: "Снизу",
+
             notification_start: "Начало",
             notification_end: "Конец",
             notification_first_volume: "Это первый том",
@@ -510,6 +516,12 @@ const resources = {
             reader_reading_scaling_fit_height: "By height",
             reader_reading_scaling_fit_width: "By width",
             reader_reading_scaling_width_percent: "Image width: {{val}}%",
+
+            reader_reading_notification: "Notifications",
+            reader_reading_notification_show: "Show notifications",
+            reader_reading_notification_position_top: "Top",
+            reader_reading_notification_position_center: "Center",
+            reader_reading_notification_position_bottom: "Bottom",
 
             notification_start: "Start",
             notification_end: "End",
