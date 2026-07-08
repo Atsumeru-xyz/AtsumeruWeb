@@ -133,10 +133,20 @@ export const LibraryPage = () => {
     });
 
     useEffect(() => {
-        if (entry?.isIntersecting && hasNextPage) {
-            fetchNextPage();
-        }
-    }, [entry, hasNextPage, fetchNextPage]);
+        const container = scrollContainerRef.current;
+        if (!container) return;
+
+        const handleScroll = () => {
+            if (isFetchingNextPage || !hasNextPage) return;
+            const {scrollTop, scrollHeight, clientHeight} = container;
+            if (scrollHeight - scrollTop - clientHeight < 200) {
+                fetchNextPage();
+            }
+        };
+
+        container.addEventListener('scroll', handleScroll);
+        return () => container.removeEventListener('scroll', handleScroll);
+    }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
     if (isCatsLoading) {
         return <Center h="50vh"><Loader/></Center>;
