@@ -95,7 +95,7 @@ export function ServerStatusOverlay() {
                         message: t('settings_covers_caching_progress', {
                             saved: cache.saved ?? 0,
                             total: cache.total ?? 0,
-                            percent: Math.round(cache.percent ?? 0),
+                            percent: cache.total > 0 ? Math.round(((cache.saved ?? 0) / cache.total) * 100) : 0,
                         }),
                         autoClose: false,
                         withCloseButton: false,
@@ -108,7 +108,7 @@ export function ServerStatusOverlay() {
                         message: t('settings_covers_caching_progress', {
                             saved: cache.saved ?? 0,
                             total: cache.total ?? 0,
-                            percent: Math.round(cache.percent ?? 0),
+                            percent: cache.total > 0 ? Math.round(((cache.saved ?? 0) / cache.total) * 100) : 0,
                         }),
                         autoClose: false,
                         withCloseButton: false,
@@ -136,8 +136,8 @@ export function ServerStatusOverlay() {
     }, [t]);
 
     const blocked = importing || updatingMeta;
-    const importPercent = Math.min(100, Math.max(0, Math.round(importInfo.percent * 100) || 0));
-    const metaPercent = Math.min(100, Math.max(0, Math.round(metaInfo.percent * 100) || 0));
+    const importPercent = importInfo.total > 0 ? Math.min(100, Math.round((importInfo.imported / importInfo.total) * 100)) : 0;
+    const metaPercent = metaInfo.total > 0 ? Math.min(100, Math.round((metaInfo.updated / metaInfo.total) * 100)) : 0;
 
     return (
         <Modal
