@@ -72,6 +72,13 @@ export const BookCard = ({book, onEdit, onChangeCategory, onShare, onDeleted}: B
     const progress = totalVolumesPages > 0 ? (totalReadPages / totalVolumesPages) * 100 : 0;
     const isCompleted = totalVolumesPages > 0 && progress >= 100;
 
+    const handleMouseDown = (e: React.MouseEvent) => {
+        if (e.button === 1) {
+            e.preventDefault();
+            window.open(`/book/${book.id}`, '_blank');
+        }
+    };
+
     const handleCardClick = () => {
         if (longPressTriggered.current) { longPressTriggered.current = false; return; }
         if (inSelection) { toggleSelect(book.id || ''); }
@@ -144,6 +151,7 @@ export const BookCard = ({book, onEdit, onChangeCategory, onShare, onDeleted}: B
                     shadow="sm" padding={0} radius="md" withBorder
                     style={{cursor: 'pointer', height: '100%', transition: 'transform 0.2s', position: 'relative'}}
                     onClick={handleCardClick} onContextMenu={handleContextMenu}
+                    onMouseDown={handleMouseDown}
                     onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerLeave={onPointerUp}
                     className="book-card-hover"
                 >
