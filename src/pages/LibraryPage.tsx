@@ -1,4 +1,4 @@
-import {useEffect, useMemo} from 'react';
+import {useEffect, useMemo, useRef} from 'react';
 import {
     ActionIcon,
     Alert,
@@ -6,6 +6,7 @@ import {
     Button,
     Center,
     Container,
+    Drawer,
     Flex,
     Group,
     Loader,
@@ -15,8 +16,8 @@ import {
     Tabs,
     Tooltip
 } from '@mantine/core';
-import {useInfiniteQuery} from '@tanstack/react-query';
-import {useIntersection} from '@mantine/hooks';
+import {useInfiniteQuery, useQuery} from '@tanstack/react-query';
+import {useMediaQuery} from '@mantine/hooks';
 import {
     IconAlphabetLatin,
     IconCalendar,
@@ -44,7 +45,10 @@ import {useHorizontalScroll} from "../useHorizontalScroll.ts";
 import {useState} from 'react';
 import {useQueryClient} from '@tanstack/react-query';
 import {useAuthStore} from '../store/authStore';
-import {IconSelectAll, IconDeselect, IconTag} from '@tabler/icons-react';
+import {useFilterStore} from '../store/filterStore';
+import {fetchFiltersList, fetchFilteredBooks} from '../api/books-filtered';
+import {FilterPanel} from '../components/filters/FilterPanel';
+import {IconSelectAll, IconDeselect, IconTag, IconFilter} from '@tabler/icons-react';
 
 interface Category {
     id: string;
@@ -82,6 +86,41 @@ export const LibraryPage = () => {
 
     const isAdmin = useAuthStore((s) => s.isAdmin());
 
+    // Filter state
+    const {
+        filtersPanelOpen, toggleFiltersPanel,
+        multiFilters, singleFilters, strictMatch,
+        filterSearch, getActiveFilterParams, resetAllFilters
+    } = useFilterStore();
+
+    const isMobile = useMediaQuery('(max-width: 768px)');
+
+    // Prevent body scroll when this page is mounted
+    useEffect(() => {
+        const prev = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => { document.body.style.overflow = prev; };
+    }, []);
+
+    // Determine if any filters are active
+    const hasActiveFilters = useMemo(() => {
+        const multiCount = Object.values(multiFilters).reduce((sum, arr) => sum + arr.length, 0);
+        const singleCount = Object.keys(singleFilters).length;
+        return multiCount + singleCount > 0;
+    }, [multiFilters, singleFilters]);
+
+    const combinedSearch = [searchQuery, filterSearch].filter(Boolean).join(' ') || undefined;
+
+    // Fetch available filters from server (cached until page refresh)
+    const {data: filtersData} = useQuery({
+        queryKey: ['filters', 'list'],
+        queryFn: () => fetchFiltersList({
+            presentation: 'SERIES_AND_SINGLES',
+        }),
+        staleTime: Infinity,
+        gcTime: Infinity,
+    });
+
     const categories = useMemo(() => {
         if (!categoriesData) return [];
         const list = (categoriesData as unknown) as Category[];
@@ -97,10 +136,9 @@ export const LibraryPage = () => {
         }
     }, [categories, activeCategory, setActiveCategory]);
 
-    const {ref, entry} = useIntersection({
-        root: null,
-        threshold: 1,
-    });
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+    const activeFilterParams = hasActiveFilters ? getActiveFilterParams() : {};
 
     const {
         data,
@@ -110,16 +148,30 @@ export const LibraryPage = () => {
         isLoading: isBooksLoading,
         isError: isBooksError
     } = useInfiniteQuery({
-        queryKey: ['books', 'infinite', activeCategory, sort, asc, searchQuery],
+        queryKey: ['books', 'infinite', activeCategory, sort, asc, searchQuery, filterSearch, activeFilterParams],
         enabled: !!activeCategory,
 
         queryFn: async ({pageParam = 1}) => {
+            if (hasActiveFilters) {
+                const res = await fetchFilteredBooks({
+                    ...activeFilterParams,
+                    category: activeCategory || '',
+                    presentation: 'SERIES_AND_SINGLES',
+                    search: combinedSearch,
+                    sort: sort as string,
+                    asc: asc,
+                    page: pageParam as number,
+                    limit: 30,
+                    with_volumes: true,
+                });
+                return res as IBaseBookItem[];
+            }
             const res = await getBooks({
                 page: pageParam as number,
                 limit: 30,
                 sort: sort as GetBooksSortType,
                 asc: asc,
-                search: searchQuery,
+                search: combinedSearch,
                 category: activeCategory || '',
                 presentation: 'SERIES_AND_SINGLES',
                 with_volumes: true
@@ -182,12 +234,10 @@ export const LibraryPage = () => {
     const currentSortLabel = t('sort_' + sort.toLowerCase());
 
     return (
-        <Container fluid px={0}>
+        <div style={{height: 'calc(100vh - 60px)', display: 'flex', flexDirection: 'column', overflow: 'hidden'}}>
             <Box bg="var(--mantine-color-body)" style={{
-                position: 'sticky',
-                top: 60,
-                zIndex: 90,
-                borderBottom: '1px solid var(--mantine-color-default-border)'
+                borderBottom: '1px solid var(--mantine-color-default-border)',
+                flexShrink: 0,
             }} px="md" py="xs">
                 <Flex direction={{base: 'column', sm: 'row'}} align={{base: 'stretch', sm: 'center'}} gap="sm"
                       justify="space-between">
@@ -245,11 +295,37 @@ export const LibraryPage = () => {
                         <ActionIcon variant="default" size="36px" onClick={() => setAsc(!asc)}>
                             {asc ? <IconSortAscending size={20}/> : <IconSortDescending size={20}/>}
                         </ActionIcon>
+
+                        <ActionIcon
+                            variant={filtersPanelOpen ? 'filled' : 'default'}
+                            size="36px"
+                            onClick={toggleFiltersPanel}
+                            style={{position: 'relative'}}
+                        >
+                            <IconFilter size={20}/>
+                            {hasActiveFilters && (
+                                <span
+                                    style={{
+                                        position: 'absolute',
+                                        top: 2,
+                                        right: 2,
+                                        width: 8,
+                                        height: 8,
+                                        borderRadius: '50%',
+                                        background: 'var(--mantine-color-red-filled)',
+                                        display: 'block',
+                                    }}
+                                />
+                            )}
+                        </ActionIcon>
                     </Group>
                 </Flex>
             </Box>
 
-            <Container fluid mt="md" px={{base: 4, sm: 'md'}}>
+            <div style={{flex: '1 1 0%', minHeight: 0, overflow: 'hidden', position: 'relative', display: 'flex', flexDirection: 'column'}}>
+                {/* Main content */}
+                <div ref={scrollContainerRef} style={{flex: '1 1 0%', minWidth: 0, overflow: 'auto'}}>
+            <div style={{marginTop: 'var(--mantine-spacing-md)', paddingLeft: 'var(--mantine-spacing-md)', paddingRight: filtersPanelOpen && !isMobile ? 'calc(var(--mantine-spacing-md) + 320px)' : 'var(--mantine-spacing-md)', position: 'relative', zIndex: 1}}>
                 {isBooksError && (
                     <Alert color="red" title={t('error')}
                            icon={<IconInfoCircle/>}><I18N>error_unable_to_load_list</I18N></Alert>
@@ -330,8 +406,44 @@ export const LibraryPage = () => {
                     </Center>
                 )}
 
-                <div ref={ref} style={{height: 20}}/>
-            </Container>
+            </div>
+                </div>
+
+                {/* Desktop filter sidebar — absolute, constrained by parent */}
+                {filtersPanelOpen && !isMobile && filtersData && (
+                    <div style={{
+                        position: 'absolute',
+                        right: 0,
+                        top: 0,
+                        bottom: 0,
+                        width: 320,
+                        overflow: 'auto',
+                        borderLeft: '1px solid var(--mantine-color-default-border)',
+                        background: 'var(--mantine-color-body)',
+                        zIndex: 10,
+                    }}>
+                        <FilterPanel
+                            filters={filtersData}
+                        />
+                    </div>
+                )}
+            </div>
+
+            {/* Mobile filter drawer */}
+            <Drawer
+                opened={filtersPanelOpen && isMobile}
+                onClose={toggleFiltersPanel}
+                position="right"
+                size="90%"
+                title="Фильтры"
+            >
+                {filtersData && (
+                    <FilterPanel
+                        filters={filtersData}
+                        onApply={toggleFiltersPanel}
+                    />
+                )}
+            </Drawer>
 
             <ChangeCategoryDialog
                 opened={categoryDialogOpen}
@@ -359,6 +471,6 @@ export const LibraryPage = () => {
                 serieHash={shareBook?.id || ''}
                 serieName={shareBook?.title || ''}
             />
-        </Container>
+        </div>
     );
 };
